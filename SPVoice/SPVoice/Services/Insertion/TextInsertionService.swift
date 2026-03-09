@@ -358,16 +358,22 @@ enum TextInsertionService {
     }
 
     private static func pasteProfile(bundleID: String?) -> PasteProfile {
+        // Universal default — robust enough for ANY app (native, Catalyst, Electron, etc.).
+        // Uses .cgAnnotatedSessionEventTap which is more universally accepted than .cghidEventTap,
+        // with generous-enough timing that virtually all apps process the paste in time.
         let defaultProfile = PasteProfile(
-            activationDelayMs: 120,
-            prePasteDelayMs: 0,
-            restoreDelay: SPVoiceConstants.Defaults.clipboardRestoreDelay,
-            eventTapLocation: .cghidEventTap,
-            keyPressDelay: 0.015
+            activationDelayMs: 150,
+            prePasteDelayMs: 50,
+            restoreDelay: 0.5,
+            eventTapLocation: .cgAnnotatedSessionEventTap,
+            keyPressDelay: 0.025
         )
 
         guard let bundleID else { return defaultProfile }
 
+        // ── Chromium browsers ──────────────────────────────────────────────
+        // Need the most generous timing: Chromium's async clipboard handling
+        // and multi-process architecture require extra delays at every step.
         if FocusedElementService.chromiumBundleIDs.contains(bundleID) {
             return PasteProfile(
                 activationDelayMs: 250,
@@ -378,24 +384,49 @@ enum TextInsertionService {
             )
         }
 
-        // Electron apps (Slack, VSCode, Discord) benefit from slightly longer timing
-        let electronBundleIDs: Set<String> = [
-            "com.tinyspeck.slackmacgap",
-            "com.microsoft.VSCode",
-            "com.hnc.Discord",
-        ]
-        if electronBundleIDs.contains(bundleID) {
+        // ── Electron / Catalyst / hybrid apps ──────────────────────────────
+        // Not Chromium browsers, but still non-native. Slightly more generous
+        // than the default to account for cross-process clipboard handling.
+        if electronAndHybridBundleIDs.contains(bundleID) {
             return PasteProfile(
-                activationDelayMs: 180,
-                prePasteDelayMs: 50,
-                restoreDelay: 0.5,
+                activationDelayMs: 200,
+                prePasteDelayMs: 80,
+                restoreDelay: 0.6,
                 eventTapLocation: .cgAnnotatedSessionEventTap,
-                keyPressDelay: 0.025
+                keyPressDelay: 0.030
             )
         }
 
         return defaultProfile
     }
+
+    /// Known Electron, Catalyst, and hybrid-framework app bundle IDs.
+    /// These apps need slightly more generous paste timing than pure Cocoa apps.
+    private static let electronAndHybridBundleIDs: Set<String> = [
+        // Electron apps
+        "com.tinyspeck.slackmacgap",        // Slack
+        "com.microsoft.VSCode",              // VS Code
+        "com.hnc.Discord",                   // Discord
+        "com.bitwarden.desktop",             // Bitwarden
+        "com.electron.lark",                 // Lark (Electron variant)
+        "com.anthropic.claudefordesktop",    // Claude Desktop
+        "com.openai.chat",                   // ChatGPT Desktop
+        "com.openai.codex",                  // Codex
+        "com.linear",                        // Linear
+        "com.figma.Desktop",                 // Figma
+        "com.spotify.client",               // Spotify
+        "com.hnc.Discord.Canary",           // Discord Canary
+        "com.1password.1password",           // 1Password
+        // Catalyst / hybrid / cross-platform
+        "net.whatsapp.WhatsApp",             // WhatsApp (Catalyst)
+        "ru.keepcoder.Telegram",             // Telegram
+        "com.tencent.xinWeChat",             // WeChat
+        "com.larksuite.macos.lark",          // Lark (native variant)
+        "ai.perplexity.comet",               // Perplexity
+        "com.microsoft.Outlook",             // Outlook
+        "com.microsoft.teams2",              // Teams
+        "com.facebook.archon",               // Messenger
+    ]
 
     private static func runningAppBundleIdentifier(for processIdentifier: pid_t?) -> String? {
         guard let processIdentifier, processIdentifier > 0 else { return nil }

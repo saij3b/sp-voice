@@ -14,7 +14,7 @@ enum SPVoiceConstants {
         static let minRecordingDuration: TimeInterval = 0.3
         static let maxRecordingDuration: TimeInterval = 300 // 5 minutes
         static let audioSampleRate: Double = 16_000
-        static let clipboardRestoreDelay: TimeInterval = 0.3
+        static let clipboardRestoreDelay: TimeInterval = 0.5
     }
 
     enum UserDefaultsKeys {
