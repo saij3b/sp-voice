@@ -19,6 +19,7 @@ targets:
         INFOPLIST_FILE: SPVoice/Info.plist
         CODE_SIGN_ENTITLEMENTS: SPVoice/SPVoice.entitlements
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: LV5J89Z63A
         PRODUCT_BUNDLE_IDENTIFIER: com.spvoice.app
         PRODUCT_NAME: "SP Voice"
         PRODUCT_MODULE_NAME: SPVoice
@@ -42,6 +43,7 @@ targets:
     settings:
       base:
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: LV5J89Z63A
         PRODUCT_BUNDLE_IDENTIFIER: com.spvoice.tests
         BUNDLE_LOADER: "$(TEST_HOST)"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SP Voice.app/Contents/MacOS/SP Voice"
