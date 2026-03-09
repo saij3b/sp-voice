@@ -13,6 +13,10 @@ struct DiagnosticsView: View {
                 diagRow("Insertion Strategy", value: appState.diagnosticsService.lastInsertionStrategy)
                 diagRow("Focused App", value: appState.diagnosticsService.lastFocusedApp)
                 diagRow("Target Role", value: appState.diagnosticsService.lastTargetRole)
+                diagRow("Bundle ID", value: appState.diagnosticsService.lastTargetBundleID)
+                if appState.diagnosticsService.lastTargetIsChromium {
+                    diagRow("Chromium Path", value: "Yes")
+                }
             }
 
             Section("Errors") {

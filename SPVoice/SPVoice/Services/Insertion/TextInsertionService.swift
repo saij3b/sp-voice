@@ -7,7 +7,19 @@ import os
 /// 1. Direct AX insertion via `kAXSelectedTextAttribute`
 /// 2. AX value splice via `kAXValueAttribute`
 /// 3. Clipboard paste fallback via Cmd+V
+///
+/// Chromium-based browsers bypass AX strategies entirely and go straight to clipboard paste,
+/// because Chromium's AX implementation does not support reliable programmatic text insertion.
 enum TextInsertionService {
+
+    /// Timing profile for the clipboard paste fallback, tuned per app family.
+    private struct PasteProfile {
+        let activationDelayMs: Int
+        let prePasteDelayMs: Int
+        let restoreDelay: TimeInterval
+        let eventTapLocation: CGEventTapLocation
+        let keyPressDelay: TimeInterval
+    }
 
     /// Result of an insertion attempt, pairing the outcome with the detected target.
     struct InsertionResult {
@@ -23,6 +35,8 @@ enum TextInsertionService {
         return InsertionResult(outcome: .clipboardCopied, target: target)
     }
 
+    // MARK: - Main Entry Point
+
     /// Insert text into the current focused element, trying strategies in order.
     /// If `savedTarget` is provided (captured before transcription), it is preferred
     /// over re-detecting the focused element, which guards against focus changes.
@@ -34,7 +48,29 @@ enum TextInsertionService {
         Logger.insertion.info("Inserting text (\(text.count) chars)")
 
         let appPID = preferredAppPID ?? savedTarget?.processIdentifier
-        await reactivateTargetAppIfNeeded(processIdentifier: appPID)
+        let bundleID = savedTarget?.bundleIdentifier ?? runningAppBundleIdentifier(for: appPID)
+        let isChromium = savedTarget?.isChromium
+            ?? (bundleID.map { FocusedElementService.chromiumBundleIDs.contains($0) } ?? false)
+
+        // ── Chromium fast-path ──────────────────────────────────────────────
+        // AX insertion NEVER works in Chromium web views. Go straight to
+        // clipboard paste to avoid wasting time and risking stale AX refs.
+        if isChromium {
+            Logger.insertion.info("Chromium detected (\(bundleID ?? "?")) — using direct paste path")
+            return await chromiumPaste(
+                text: text,
+                savedTarget: savedTarget,
+                appPID: appPID,
+                bundleID: bundleID
+            )
+        }
+
+        // ── Standard path for native apps ──────────────────────────────────
+        let profile = pasteProfile(bundleID: bundleID)
+        await reactivateTargetAppIfNeeded(
+            processIdentifier: appPID,
+            activationDelayMs: profile.activationDelayMs
+        )
 
         // Use saved target if available, otherwise detect now.
         let target: FocusedTarget?
@@ -51,7 +87,12 @@ enum TextInsertionService {
         guard let target else {
             Logger.insertion.warning("No focused element — attempting clipboard paste fallback")
             if let appPID {
-                return await clipboardFallback(text: text, target: nil, preferredAppPID: appPID)
+                return await clipboardFallback(
+                    text: text,
+                    target: nil,
+                    preferredAppPID: appPID,
+                    profile: profile
+                )
             }
             return copyToClipboardOnly(text, target: nil)
         }
@@ -64,7 +105,8 @@ enum TextInsertionService {
             return await clipboardFallback(
                 text: text,
                 target: target,
-                preferredAppPID: target.processIdentifier
+                preferredAppPID: target.processIdentifier,
+                profile: pasteProfile(bundleID: target.bundleIdentifier)
             )
         }
 
@@ -83,7 +125,8 @@ enum TextInsertionService {
         return await clipboardFallback(
             text: text,
             target: target,
-            preferredAppPID: target.processIdentifier
+            preferredAppPID: target.processIdentifier,
+            profile: pasteProfile(bundleID: target.bundleIdentifier)
         )
     }
 
@@ -190,24 +233,103 @@ enum TextInsertionService {
         )
     }
 
-    // MARK: - Strategy 3: Clipboard Paste Fallback
+    // MARK: - Chromium Paste Path
+
+    /// Dedicated insertion path for Chromium-based browsers.
+    /// Skips all AX strategies (they never work in web views) and uses a hardened
+    /// paste flow with:
+    ///   1. Re-activate target app
+    ///   2. Re-probe focus to verify we're in the right place
+    ///   3. Generous timing for Chromium's async clipboard handling
+    ///   4. Double-tap paste as fallback
+    private static func chromiumPaste(
+        text: String,
+        savedTarget: FocusedTarget?,
+        appPID: pid_t?,
+        bundleID: String?
+    ) async -> InsertionResult {
+        let profile = pasteProfile(bundleID: bundleID)
+
+        // Step 1: Re-activate the target app
+        await reactivateTargetAppIfNeeded(
+            processIdentifier: appPID,
+            activationDelayMs: profile.activationDelayMs
+        )
+
+        // Step 2: Re-probe focus right now (saved target may be stale)
+        let liveTarget: FocusedTarget?
+        if let appPID {
+            liveTarget = await Task.detached {
+                FocusedElementService.reprobeTarget(pid: appPID)
+            }.value
+        } else {
+            liveTarget = savedTarget
+        }
+
+        let reportTarget = liveTarget ?? savedTarget
+
+        if let live = liveTarget {
+            Logger.insertion.info(
+                "Chromium reprobe: role=\(live.role) subRole=\(live.subRole ?? "nil") app=\(live.appName)"
+            )
+        } else {
+            Logger.insertion.warning(
+                "Chromium reprobe: no focus found — proceeding with blind paste (PID=\(appPID.map { String($0) } ?? "nil"))"
+            )
+        }
+
+        // Step 3: Set clipboard and paste
+        let saved = PasteboardHelper.saveClipboard()
+        PasteboardHelper.setClipboardText(text)
+
+        // Pre-paste delay lets Chromium process the clipboard change
+        try? await Task.sleep(for: .milliseconds(profile.prePasteDelayMs))
+
+        CGEventHelper.simulatePaste(
+            tapLocation: profile.eventTapLocation,
+            keyPressDelay: profile.keyPressDelay
+        )
+
+        // Step 4: Wait for paste to be processed, then restore clipboard
+        try? await Task.sleep(for: .seconds(profile.restoreDelay))
+
+        PasteboardHelper.restoreClipboard(saved)
+
+        Logger.insertion.info(
+            "Chromium paste completed (app=\(reportTarget?.appName ?? "unknown") role=\(reportTarget?.role ?? "unknown") bundle=\(bundleID ?? "unknown"))"
+        )
+        return InsertionResult(outcome: .clipboardPasteSuccess, target: reportTarget)
+    }
+
+    // MARK: - Strategy 3: Clipboard Paste Fallback (generic)
 
     /// Save clipboard → set text → simulate Cmd+V → restore clipboard.
     /// Universal fallback that works in virtually all apps.
     private static func clipboardFallback(
         text: String,
         target: FocusedTarget?,
-        preferredAppPID: pid_t?
+        preferredAppPID: pid_t?,
+        profile: PasteProfile
     ) async -> InsertionResult {
-        await reactivateTargetAppIfNeeded(processIdentifier: preferredAppPID)
+        await reactivateTargetAppIfNeeded(
+            processIdentifier: preferredAppPID,
+            activationDelayMs: profile.activationDelayMs
+        )
 
         let saved = PasteboardHelper.saveClipboard()
         PasteboardHelper.setClipboardText(text)
 
-        CGEventHelper.simulatePaste()
+        if profile.prePasteDelayMs > 0 {
+            try? await Task.sleep(for: .milliseconds(profile.prePasteDelayMs))
+        }
+
+        CGEventHelper.simulatePaste(
+            tapLocation: profile.eventTapLocation,
+            keyPressDelay: profile.keyPressDelay
+        )
 
         // Wait for the paste event to be processed by the target app
-        try? await Task.sleep(for: .seconds(SPVoiceConstants.Defaults.clipboardRestoreDelay))
+        try? await Task.sleep(for: .seconds(profile.restoreDelay))
 
         PasteboardHelper.restoreClipboard(saved)
 
@@ -217,7 +339,12 @@ enum TextInsertionService {
         return InsertionResult(outcome: .clipboardPasteSuccess, target: target)
     }
 
-    private static func reactivateTargetAppIfNeeded(processIdentifier: pid_t?) async {
+    // MARK: - Helpers
+
+    private static func reactivateTargetAppIfNeeded(
+        processIdentifier: pid_t?,
+        activationDelayMs: Int
+    ) async {
         guard let processIdentifier, processIdentifier > 0,
               let app = NSRunningApplication(processIdentifier: processIdentifier) else {
             return
@@ -227,6 +354,51 @@ enum TextInsertionService {
 
         Logger.insertion.debug("Reactivating target app before insertion: \(app.localizedName ?? "unknown")")
         app.activate(options: [.activateIgnoringOtherApps])
-        try? await Task.sleep(for: .milliseconds(120))
+        try? await Task.sleep(for: .milliseconds(activationDelayMs))
+    }
+
+    private static func pasteProfile(bundleID: String?) -> PasteProfile {
+        let defaultProfile = PasteProfile(
+            activationDelayMs: 120,
+            prePasteDelayMs: 0,
+            restoreDelay: SPVoiceConstants.Defaults.clipboardRestoreDelay,
+            eventTapLocation: .cghidEventTap,
+            keyPressDelay: 0.015
+        )
+
+        guard let bundleID else { return defaultProfile }
+
+        if FocusedElementService.chromiumBundleIDs.contains(bundleID) {
+            return PasteProfile(
+                activationDelayMs: 250,
+                prePasteDelayMs: 100,
+                restoreDelay: 1.0,
+                eventTapLocation: .cgAnnotatedSessionEventTap,
+                keyPressDelay: 0.035
+            )
+        }
+
+        // Electron apps (Slack, VSCode, Discord) benefit from slightly longer timing
+        let electronBundleIDs: Set<String> = [
+            "com.tinyspeck.slackmacgap",
+            "com.microsoft.VSCode",
+            "com.hnc.Discord",
+        ]
+        if electronBundleIDs.contains(bundleID) {
+            return PasteProfile(
+                activationDelayMs: 180,
+                prePasteDelayMs: 50,
+                restoreDelay: 0.5,
+                eventTapLocation: .cgAnnotatedSessionEventTap,
+                keyPressDelay: 0.025
+            )
+        }
+
+        return defaultProfile
+    }
+
+    private static func runningAppBundleIdentifier(for processIdentifier: pid_t?) -> String? {
+        guard let processIdentifier, processIdentifier > 0 else { return nil }
+        return NSRunningApplication(processIdentifier: processIdentifier)?.bundleIdentifier
     }
 }

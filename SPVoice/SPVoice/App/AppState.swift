@@ -267,7 +267,9 @@ final class AppState: ObservableObject {
             diagnosticsService.recordInsertionOutcome(
                 insertionResult.outcome,
                 app: insertionResult.target?.appName,
-                role: insertionResult.target?.role
+                role: insertionResult.target?.role,
+                bundleID: insertionResult.target?.bundleIdentifier,
+                isChromium: insertionResult.target?.isChromium ?? false
             )
             diagnosticsService.incrementSessionCount()
 

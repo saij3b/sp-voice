@@ -12,6 +12,8 @@ final class DiagnosticsService: ObservableObject {
     @Published var lastInsertionStrategy: String?
     @Published var lastFocusedApp: String?
     @Published var lastTargetRole: String?
+    @Published var lastTargetBundleID: String?
+    @Published var lastTargetIsChromium: Bool = false
     @Published var lastProviderUsed: String?
     @Published var lastModelUsed: String?
     @Published var sessionCount: Int = 0
@@ -21,20 +23,29 @@ final class DiagnosticsService: ObservableObject {
         Logger.diagnostics.error("Provider error: \(error.localizedDescription)")
     }
 
-    func recordInsertionOutcome(_ outcome: InsertionOutcome, app: String?, role: String? = nil) {
+    func recordInsertionOutcome(
+        _ outcome: InsertionOutcome,
+        app: String?,
+        role: String? = nil,
+        bundleID: String? = nil,
+        isChromium: Bool = false
+    ) {
         lastFocusedApp = app
         lastTargetRole = role
+        lastTargetBundleID = bundleID
+        lastTargetIsChromium = isChromium
         switch outcome {
         case .directAXSuccess: lastInsertionStrategy = "Direct AX"
         case .axValueReplaceSuccess: lastInsertionStrategy = "AX Value Replace"
-        case .clipboardPasteSuccess: lastInsertionStrategy = "Clipboard Paste"
+        case .clipboardPasteSuccess:
+            lastInsertionStrategy = isChromium ? "Chromium Paste" : "Clipboard Paste"
         case .clipboardCopied: lastInsertionStrategy = "Clipboard Copy"
         case .failed(let err):
             lastInsertionError = err.localizedDescription
             lastInsertionStrategy = "Failed"
         }
         Logger.diagnostics.info(
-            "Insertion: strategy=\(self.lastInsertionStrategy ?? "nil") app=\(app ?? "nil") role=\(role ?? "nil")"
+            "Insertion: strategy=\(self.lastInsertionStrategy ?? "nil") app=\(app ?? "nil") role=\(role ?? "nil") bundle=\(bundleID ?? "nil") chromium=\(isChromium)"
         )
     }
 
@@ -58,6 +69,8 @@ final class DiagnosticsService: ObservableObject {
         lastInsertionStrategy = nil
         lastFocusedApp = nil
         lastTargetRole = nil
+        lastTargetBundleID = nil
+        lastTargetIsChromium = false
         lastProviderUsed = nil
         lastModelUsed = nil
         sessionCount = 0

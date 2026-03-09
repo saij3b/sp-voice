@@ -10,7 +10,20 @@ final class OpenRouterProvider: TranscriptionProvider {
     let capabilities: ProviderCapabilities = .openRouter
 
     /// Built-in fallback models (always available even without API fetch).
+    /// Gemini 2.5 Flash Lite is first → default for new installs.
     static let builtInModels: [TranscriptionModel] = [
+        TranscriptionModel(
+            id: "google/gemini-2.5-flash-lite-preview",
+            displayName: "Gemini 2.5 Flash Lite (via OpenRouter)",
+            provider: .openrouter,
+            isDictationCapable: true
+        ),
+        TranscriptionModel(
+            id: "google/gemini-2.5-flash",
+            displayName: "Gemini 2.5 Flash (via OpenRouter)",
+            provider: .openrouter,
+            isDictationCapable: true
+        ),
         TranscriptionModel(
             id: "openai/gpt-4o-audio-preview",
             displayName: "GPT-4o Audio Preview (via OpenRouter)",
@@ -20,12 +33,6 @@ final class OpenRouterProvider: TranscriptionProvider {
         TranscriptionModel(
             id: "openai/gpt-4o-mini-audio-preview",
             displayName: "GPT-4o Mini Audio Preview (via OpenRouter)",
-            provider: .openrouter,
-            isDictationCapable: true
-        ),
-        TranscriptionModel(
-            id: "google/gemini-2.5-flash",
-            displayName: "Gemini 2.5 Flash (via OpenRouter)",
             provider: .openrouter,
             isDictationCapable: true
         ),

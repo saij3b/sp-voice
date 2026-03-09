@@ -8,7 +8,10 @@ struct FocusedTarget {
     let processIdentifier: pid_t
     let element: AXUIElement
     let role: String
+    let subRole: String?
     let isEditable: Bool
+    /// Whether the target app is a known Chromium-based browser.
+    let isChromium: Bool
     let hasSelection: Bool
     let selectionRange: CFRange?
     let selectedText: String?
