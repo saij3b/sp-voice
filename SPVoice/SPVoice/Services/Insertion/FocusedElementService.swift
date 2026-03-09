@@ -52,6 +52,7 @@ enum FocusedElementService {
         let target = FocusedTarget(
             appName: appName,
             bundleIdentifier: bundleID,
+            processIdentifier: processIdentifier(for: element, fallback: frontApp?.processIdentifier ?? 0),
             element: element,
             role: role,
             isEditable: isEditable,
@@ -110,5 +111,14 @@ enum FocusedElementService {
         let result = AXUIElementCopyAttributeValue(element, attribute, &value)
         guard result == .success else { return nil }
         return value
+    }
+
+    private static func processIdentifier(for element: AXUIElement, fallback: pid_t) -> pid_t {
+        var pid: pid_t = 0
+        let result = AXUIElementGetPid(element, &pid)
+        if result == .success, pid > 0 {
+            return pid
+        }
+        return fallback
     }
 }

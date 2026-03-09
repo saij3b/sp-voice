@@ -5,6 +5,7 @@ import Foundation
 struct FocusedTarget {
     let appName: String
     let bundleIdentifier: String?
+    let processIdentifier: pid_t
     let element: AXUIElement
     let role: String
     let isEditable: Bool

@@ -1,3 +1,4 @@
+import AppKit
 import ApplicationServices
 import Foundation
 import os
@@ -25,8 +26,15 @@ enum TextInsertionService {
     /// Insert text into the current focused element, trying strategies in order.
     /// If `savedTarget` is provided (captured before transcription), it is preferred
     /// over re-detecting the focused element, which guards against focus changes.
-    static func insert(_ text: String, savedTarget: FocusedTarget? = nil) async -> InsertionResult {
+    static func insert(
+        _ text: String,
+        savedTarget: FocusedTarget? = nil,
+        preferredAppPID: pid_t? = nil
+    ) async -> InsertionResult {
         Logger.insertion.info("Inserting text (\(text.count) chars)")
+
+        let appPID = preferredAppPID ?? savedTarget?.processIdentifier
+        await reactivateTargetAppIfNeeded(processIdentifier: appPID)
 
         // Use saved target if available, otherwise detect now.
         let target: FocusedTarget?
@@ -41,7 +49,10 @@ enum TextInsertionService {
 
         // Guard: focused element exists
         guard let target else {
-            Logger.insertion.warning("No focused element — copying transcript to clipboard")
+            Logger.insertion.warning("No focused element — attempting clipboard paste fallback")
+            if let appPID {
+                return await clipboardFallback(text: text, target: nil, preferredAppPID: appPID)
+            }
             return copyToClipboardOnly(text, target: nil)
         }
 
@@ -50,7 +61,11 @@ enum TextInsertionService {
             Logger.insertion.warning(
                 "Target not editable (app=\(target.appName) role=\(target.role)) — falling back to clipboard paste"
             )
-            return await clipboardFallback(text: text, target: target)
+            return await clipboardFallback(
+                text: text,
+                target: target,
+                preferredAppPID: target.processIdentifier
+            )
         }
 
         // Strategy 1: Direct AX insertion via kAXSelectedTextAttribute
@@ -65,7 +80,11 @@ enum TextInsertionService {
 
         // Strategy 3: Clipboard paste fallback
         Logger.insertion.info("AX strategies exhausted — using clipboard paste fallback")
-        return await clipboardFallback(text: text, target: target)
+        return await clipboardFallback(
+            text: text,
+            target: target,
+            preferredAppPID: target.processIdentifier
+        )
     }
 
     // MARK: - Strategy 1: Direct AX Insertion
@@ -175,7 +194,13 @@ enum TextInsertionService {
 
     /// Save clipboard → set text → simulate Cmd+V → restore clipboard.
     /// Universal fallback that works in virtually all apps.
-    private static func clipboardFallback(text: String, target: FocusedTarget?) async -> InsertionResult {
+    private static func clipboardFallback(
+        text: String,
+        target: FocusedTarget?,
+        preferredAppPID: pid_t?
+    ) async -> InsertionResult {
+        await reactivateTargetAppIfNeeded(processIdentifier: preferredAppPID)
+
         let saved = PasteboardHelper.saveClipboard()
         PasteboardHelper.setClipboardText(text)
 
@@ -190,5 +215,18 @@ enum TextInsertionService {
             "Clipboard paste fallback used (app=\(target?.appName ?? "unknown") role=\(target?.role ?? "unknown"))"
         )
         return InsertionResult(outcome: .clipboardPasteSuccess, target: target)
+    }
+
+    private static func reactivateTargetAppIfNeeded(processIdentifier: pid_t?) async {
+        guard let processIdentifier, processIdentifier > 0,
+              let app = NSRunningApplication(processIdentifier: processIdentifier) else {
+            return
+        }
+
+        guard !app.isActive else { return }
+
+        Logger.insertion.debug("Reactivating target app before insertion: \(app.localizedName ?? "unknown")")
+        app.activate(options: [.activateIgnoringOtherApps])
+        try? await Task.sleep(for: .milliseconds(120))
     }
 }

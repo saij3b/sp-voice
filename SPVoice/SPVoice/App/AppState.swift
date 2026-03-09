@@ -29,6 +29,7 @@ final class AppState: ObservableObject {
 
     /// Saved insertion target captured when recording starts, used to survive focus changes.
     private var savedInsertionTarget: FocusedTarget?
+    private var savedInsertionAppPID: pid_t?
     private var transcriptionTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
     private let overlayWindow = OverlayWindow()
@@ -199,6 +200,7 @@ final class AppState: ObservableObject {
     }
 
     private func beginRecording() async {
+        let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let target = await Task.detached(priority: .userInitiated) {
             FocusedElementService.currentTarget()
         }.value
@@ -206,6 +208,7 @@ final class AppState: ObservableObject {
         do {
             try audioRecorder.startRecording()
             savedInsertionTarget = target
+            savedInsertionAppPID = target?.processIdentifier ?? frontmostPID
             dictationState = .listening
             lastError = nil
         } catch {
@@ -248,7 +251,9 @@ final class AppState: ObservableObject {
             if autoInsertEnabled {
                 // Insert — use saved target if available (survives focus changes)
                 insertionResult = await TextInsertionService.insert(
-                    processedText, savedTarget: savedInsertionTarget
+                    processedText,
+                    savedTarget: savedInsertionTarget,
+                    preferredAppPID: savedInsertionAppPID
                 )
             } else {
                 insertionResult = TextInsertionService.copyToClipboardOnly(
@@ -257,6 +262,7 @@ final class AppState: ObservableObject {
                 )
             }
             savedInsertionTarget = nil
+            savedInsertionAppPID = nil
 
             diagnosticsService.recordInsertionOutcome(
                 insertionResult.outcome,
@@ -313,6 +319,7 @@ final class AppState: ObservableObject {
             }
         } catch {
             savedInsertionTarget = nil
+            savedInsertionAppPID = nil
             audioRecorder.cleanupTempFiles()
             lastError = error.localizedDescription
             dictationState = .error(message: userFriendlyMessage(for: error))
@@ -334,6 +341,7 @@ final class AppState: ObservableObject {
         transcriptionTask?.cancel()
         transcriptionTask = nil
         savedInsertionTarget = nil
+        savedInsertionAppPID = nil
         dictationState = .idle
         lastError = nil
     }
