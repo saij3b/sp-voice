@@ -8,15 +8,14 @@ enum FocusedElementService {
     /// Resolve the currently focused text target.
     /// Must be called off the main thread to avoid hangs.
     static func currentTarget() -> FocusedTarget? {
-        let systemWide = AXUIElementCreateSystemWide()
-        var focusedValue: CFTypeRef?
-        let err = AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedValue)
-        guard err == .success, let focused = focusedValue else {
-            Logger.insertion.debug("No focused element found")
+        let frontApp = NSWorkspace.shared.frontmostApplication
+        let appName = frontApp?.localizedName ?? "Unknown"
+        let bundleID = frontApp?.bundleIdentifier
+
+        guard let element = resolveFocusedElement(frontApp: frontApp) else {
+            Logger.insertion.debug("No focused element found for app=\(appName)")
             return nil
         }
-
-        let element = focused as! AXUIElement
 
         // Read role
         var roleValue: CFTypeRef?
@@ -46,17 +45,16 @@ enum FocusedElementService {
             selectionRange = range
         }
 
-        // Get frontmost app info
-        let frontApp = NSWorkspace.shared.frontmostApplication
-        let appName = frontApp?.localizedName ?? "Unknown"
-        let bundleID = frontApp?.bundleIdentifier
+        let isEditable = isSelectedTextSettable.boolValue
+            || isValueAttrSettable.boolValue
+            || editableRoles.contains(role)
 
         let target = FocusedTarget(
             appName: appName,
             bundleIdentifier: bundleID,
             element: element,
             role: role,
-            isEditable: isSelectedTextSettable.boolValue,
+            isEditable: isEditable,
             hasSelection: selectionRange.map { $0.length > 0 } ?? false,
             selectionRange: selectionRange,
             selectedText: selectedText,
@@ -68,5 +66,49 @@ enum FocusedElementService {
         )
 
         return target
+    }
+
+    private static let editableRoles: Set<String> = [
+        kAXTextFieldRole as String,
+        kAXTextAreaRole as String,
+        "AXSearchField",
+        kAXComboBoxRole as String
+    ]
+
+    private static func resolveFocusedElement(frontApp: NSRunningApplication?) -> AXUIElement? {
+        if let pid = frontApp?.processIdentifier,
+           let element = focusedElement(from: AXUIElementCreateApplication(pid)) {
+            return element
+        }
+
+        let systemWide = AXUIElementCreateSystemWide()
+        if let element = focusedElement(from: systemWide) {
+            return element
+        }
+
+        return nil
+    }
+
+    private static func focusedElement(from root: AXUIElement) -> AXUIElement? {
+        if let value = attributeValue(kAXFocusedUIElementAttribute as CFString, on: root) {
+            return value as! AXUIElement
+        }
+
+        guard let windowValue = attributeValue(kAXFocusedWindowAttribute as CFString, on: root) else {
+            return nil
+        }
+        let window = windowValue as! AXUIElement
+
+        guard let value = attributeValue(kAXFocusedUIElementAttribute as CFString, on: window) else {
+            return nil
+        }
+        return value as! AXUIElement
+    }
+
+    private static func attributeValue(_ attribute: CFString, on element: AXUIElement) -> CFTypeRef? {
+        var value: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(element, attribute, &value)
+        guard result == .success else { return nil }
+        return value
     }
 }
