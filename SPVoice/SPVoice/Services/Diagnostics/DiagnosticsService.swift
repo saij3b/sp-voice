@@ -28,6 +28,7 @@ final class DiagnosticsService: ObservableObject {
         case .directAXSuccess: lastInsertionStrategy = "Direct AX"
         case .axValueReplaceSuccess: lastInsertionStrategy = "AX Value Replace"
         case .clipboardPasteSuccess: lastInsertionStrategy = "Clipboard Paste"
+        case .clipboardCopied: lastInsertionStrategy = "Clipboard Copy"
         case .failed(let err):
             lastInsertionError = err.localizedDescription
             lastInsertionStrategy = "Failed"

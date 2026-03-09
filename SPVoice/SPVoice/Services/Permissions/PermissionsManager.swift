@@ -142,7 +142,7 @@ final class PermissionsManager: ObservableObject {
     // MARK: - Aggregate
 
     var allPermissionsGranted: Bool {
-        inputMonitoringGranted && microphoneStatus == .authorized
+        accessibilityGranted && inputMonitoringGranted && microphoneStatus == .authorized
     }
 
     private func currentAccessibilityTrust() -> Bool {

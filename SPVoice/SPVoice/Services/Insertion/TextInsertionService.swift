@@ -14,6 +14,14 @@ enum TextInsertionService {
         let target: FocusedTarget?
     }
 
+    static func copyToClipboardOnly(_ text: String, target: FocusedTarget?) -> InsertionResult {
+        PasteboardHelper.setClipboardText(text)
+        Logger.insertion.info(
+            "Copied transcript to clipboard without paste (app=\(target?.appName ?? "unknown") role=\(target?.role ?? "unknown"))"
+        )
+        return InsertionResult(outcome: .clipboardCopied, target: target)
+    }
+
     /// Insert text into the current focused element, trying strategies in order.
     /// If `savedTarget` is provided (captured before transcription), it is preferred
     /// over re-detecting the focused element, which guards against focus changes.
@@ -33,14 +41,14 @@ enum TextInsertionService {
 
         // Guard: focused element exists
         guard let target else {
-            Logger.insertion.warning("No focused element — falling back to clipboard")
-            return await clipboardFallback(text: text, target: nil)
+            Logger.insertion.warning("No focused element — copying transcript to clipboard")
+            return copyToClipboardOnly(text, target: nil)
         }
 
         // Guard: element is editable (try clipboard fallback for non-editable targets)
         guard target.isEditable else {
             Logger.insertion.warning(
-                "Target not editable (app=\(target.appName) role=\(target.role)) — falling back to clipboard"
+                "Target not editable (app=\(target.appName) role=\(target.role)) — falling back to clipboard paste"
             )
             return await clipboardFallback(text: text, target: target)
         }

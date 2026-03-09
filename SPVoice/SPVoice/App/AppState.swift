@@ -184,7 +184,7 @@ final class AppState: ObservableObject {
                     await permissionsManager.requestMicrophone()
                 }
                 if permissionsManager.microphoneStatus == .authorized {
-                    beginRecording()
+                    await beginRecording()
                 } else {
                     lastError = "Microphone permission denied"
                     dictationState = .error(message: "Microphone access denied. Open System Settings → Privacy → Microphone.")
@@ -193,22 +193,21 @@ final class AppState: ObservableObject {
             return
         }
 
-        beginRecording()
+        Task {
+            await beginRecording()
+        }
     }
 
-    private func beginRecording() {
+    private func beginRecording() async {
+        let target = await Task.detached(priority: .userInitiated) {
+            FocusedElementService.currentTarget()
+        }.value
+
         do {
             try audioRecorder.startRecording()
+            savedInsertionTarget = target
             dictationState = .listening
             lastError = nil
-
-            // Capture the focused target now, before transcription/processing might shift focus
-            Task { [weak self] in
-                let target = await Task.detached(priority: .userInitiated) {
-                    FocusedElementService.currentTarget()
-                }.value
-                self?.savedInsertionTarget = target
-            }
         } catch {
             lastError = error.localizedDescription
             dictationState = .error(message: error.localizedDescription)
@@ -239,10 +238,24 @@ final class AppState: ObservableObject {
             let processedText = try await TextProcessingService.process(result.text, mode: mode)
             dictationState = .inserting
 
-            // Insert — use saved target if available (survives focus changes)
-            let insertionResult = await TextInsertionService.insert(
-                processedText, savedTarget: savedInsertionTarget
-            )
+            let autoInsertEnabled = (
+                UserDefaults.standard.object(
+                    forKey: SPVoiceConstants.UserDefaultsKeys.autoInsertEnabled
+                ) as? Bool
+            ) ?? true
+
+            let insertionResult: TextInsertionService.InsertionResult
+            if autoInsertEnabled {
+                // Insert — use saved target if available (survives focus changes)
+                insertionResult = await TextInsertionService.insert(
+                    processedText, savedTarget: savedInsertionTarget
+                )
+            } else {
+                insertionResult = TextInsertionService.copyToClipboardOnly(
+                    processedText,
+                    target: savedInsertionTarget
+                )
+            }
             savedInsertionTarget = nil
 
             diagnosticsService.recordInsertionOutcome(
@@ -264,7 +277,7 @@ final class AppState: ObservableObject {
                     id: UUID(),
                     timestamp: Date(),
                     text: processedText,
-                    provider: providerManager.resolvedPrimaryID ?? .openai,
+                    provider: result.provider,
                     model: result.model,
                     latencyMs: result.latencyMs
                 )
@@ -281,6 +294,8 @@ final class AppState: ObservableObject {
             let preview: String
             if case .clipboardPasteSuccess = insertionResult.outcome {
                 preview = String(processedText.prefix(40)) + " (pasted)"
+            } else if case .clipboardCopied = insertionResult.outcome {
+                preview = "Copied to clipboard"
             } else if case .failed = insertionResult.outcome {
                 preview = "Copied to clipboard"
             } else {
@@ -298,6 +313,7 @@ final class AppState: ObservableObject {
             }
         } catch {
             savedInsertionTarget = nil
+            audioRecorder.cleanupTempFiles()
             lastError = error.localizedDescription
             dictationState = .error(message: userFriendlyMessage(for: error))
             diagnosticsService.recordProviderError(error)

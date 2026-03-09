@@ -20,6 +20,7 @@ enum InsertionOutcome: Equatable {
     case directAXSuccess
     case axValueReplaceSuccess
     case clipboardPasteSuccess
+    case clipboardCopied
     case failed(InsertionError)
 }
 
