@@ -1,0 +1,58 @@
+name: SPVoice
+options:
+  bundleIdPrefix: com.spvoice
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "15.0"
+  createIntermediateGroups: true
+
+targets:
+  SPVoice:
+    type: application
+    platform: macOS
+    sources:
+      - path: SPVoice
+        excludes:
+          - "**/.gitkeep"
+    settings:
+      base:
+        INFOPLIST_FILE: SPVoice/Info.plist
+        CODE_SIGN_ENTITLEMENTS: SPVoice/SPVoice.entitlements
+        CODE_SIGN_STYLE: Automatic
+        PRODUCT_BUNDLE_IDENTIFIER: com.spvoice.app
+        PRODUCT_NAME: "SP Voice"
+        PRODUCT_MODULE_NAME: SPVoice
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: 1
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        SWIFT_VERSION: "5.9"
+        ENABLE_HARDENED_RUNTIME: YES
+        COMBINE_HIDPI_IMAGES: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  SPVoiceTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: SPVoiceTests
+        excludes:
+          - "**/.gitkeep"
+    dependencies:
+      - target: SPVoice
+    settings:
+      base:
+        CODE_SIGN_STYLE: Automatic
+        PRODUCT_BUNDLE_IDENTIFIER: com.spvoice.tests
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SP Voice.app/Contents/MacOS/SP Voice"
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  SPVoice:
+    build:
+      targets:
+        SPVoice: all
+        SPVoiceTests: [test]
+    test:
+      targets:
+        - SPVoiceTests
