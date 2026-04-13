@@ -49,6 +49,7 @@ private struct OnboardingKeyEntry: View {
 
     @State private var key = ""
     @State private var saved = false
+    @State private var saveError: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -60,7 +61,7 @@ private struct OnboardingKeyEntry: View {
                         .foregroundStyle(.green)
                         .font(.caption)
                     Spacer()
-                    Button("Change") { saved = false }
+                    Button("Change") { saved = false; saveError = nil }
                         .controlSize(.small)
                 }
             } else {
@@ -69,14 +70,24 @@ private struct OnboardingKeyEntry: View {
                         .textFieldStyle(.roundedBorder)
                     Button("Save") {
                         guard !key.isEmpty else { return }
-                        try? credentialsStore.store(key: key, for: providerID)
-                        key = ""
-                        saved = true
-                        onSave()
+                        do {
+                            try credentialsStore.store(key: key, for: providerID)
+                            key = ""
+                            saved = true
+                            saveError = nil
+                            onSave()
+                        } catch {
+                            saveError = error.localizedDescription
+                        }
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(key.isEmpty)
+                }
+                if let error = saveError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
                 }
             }
         }

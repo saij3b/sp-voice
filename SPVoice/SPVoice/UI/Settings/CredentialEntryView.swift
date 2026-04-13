@@ -6,12 +6,14 @@ struct CredentialEntryView: View {
     @EnvironmentObject private var appState: AppState
     @State private var apiKey: String = ""
     @State private var isEditing: Bool = false
+    @State private var saveError: String? = nil
 
     private var hasKey: Bool {
         appState.credentialsStore.hasCredential(for: providerID)
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
         HStack {
             Text(providerID.rawValue.capitalized)
                 .frame(width: 90, alignment: .leading)
@@ -22,16 +24,22 @@ struct CredentialEntryView: View {
 
                 Button("Save") {
                     guard !apiKey.isEmpty else { return }
-                    try? appState.credentialsStore.store(key: apiKey, for: providerID)
-                    apiKey = ""
-                    isEditing = false
-                    appState.providerManager.refreshAvailableProviders()
+                    do {
+                        try appState.credentialsStore.store(key: apiKey, for: providerID)
+                        apiKey = ""
+                        isEditing = false
+                        saveError = nil
+                        appState.providerManager.refreshAvailableProviders()
+                    } catch {
+                        saveError = error.localizedDescription
+                    }
                 }
                 .buttonStyle(.borderedProminent)
 
                 Button("Cancel") {
                     apiKey = ""
                     isEditing = false
+                    saveError = nil
                 }
             } else {
                 if hasKey {
@@ -51,6 +59,13 @@ struct CredentialEntryView: View {
                     Button("Add Key") { isEditing = true }
                 }
             }
+        }
+        if let error = saveError {
+            Text(error)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .padding(.leading, 94)
+        }
         }
     }
 }

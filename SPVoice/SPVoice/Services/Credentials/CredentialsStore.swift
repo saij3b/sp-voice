@@ -22,13 +22,16 @@ final class CredentialsStore: CredentialsStoring {
     }
 
     func store(key: String, for provider: ProviderID) throws {
-        guard let data = key.data(using: .utf8) else {
+        // Trim whitespace/newlines — pasted keys often have trailing characters
+        let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let data = trimmedKey.data(using: .utf8) else {
             throw CredentialsError.encodingFailed
         }
 
         // Lightweight format validation
         if let prefix = provider.keyPrefixHint {
-            guard key.hasPrefix(prefix) else {
+            guard trimmedKey.hasPrefix(prefix) else {
                 throw CredentialsError.invalidKeyFormat(
                     hint: "Key should start with \"\(prefix)\""
                 )
