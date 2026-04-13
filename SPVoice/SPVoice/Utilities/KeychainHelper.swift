@@ -23,14 +23,11 @@ enum KeychainHelper {
     // MARK: - CRUD
 
     static func save(service: String, account: String, data: Data) throws {
-        // Use Data Protection keychain — no per-app password prompts
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
             kSecAttrAccount: account,
             kSecValueData: data,
-            kSecUseDataProtectionKeychain: true,
-            kSecAttrAccessible: kSecAttrAccessibleWhenUnlocked,
         ]
 
         let status = SecItemAdd(query as CFDictionary, nil)
@@ -41,7 +38,6 @@ enum KeychainHelper {
                 kSecClass: kSecClassGenericPassword,
                 kSecAttrService: service,
                 kSecAttrAccount: account,
-                kSecUseDataProtectionKeychain: true,
             ]
             let attributes: [CFString: Any] = [kSecValueData: data]
             let updateStatus = SecItemUpdate(updateQuery as CFDictionary, attributes as CFDictionary)
@@ -54,35 +50,6 @@ enum KeychainHelper {
     }
 
     static func load(service: String, account: String) throws -> Data {
-        let query: [CFString: Any] = [
-            kSecClass: kSecClassGenericPassword,
-            kSecAttrService: service,
-            kSecAttrAccount: account,
-            kSecReturnData: true,
-            kSecMatchLimit: kSecMatchLimitOne,
-            kSecUseDataProtectionKeychain: true,
-        ]
-
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-
-        if status == errSecItemNotFound {
-            // Fall back to legacy keychain for keys stored before migration
-            return try loadLegacy(service: service, account: account)
-        }
-
-        guard status == errSecSuccess else {
-            throw KeychainError.unexpectedStatus(status)
-        }
-
-        guard let data = result as? Data else {
-            throw KeychainError.dataConversionError
-        }
-        return data
-    }
-
-    /// Read from legacy (non-Data-Protection) keychain for backward compat.
-    private static func loadLegacy(service: String, account: String) throws -> Data {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
@@ -108,44 +75,27 @@ enum KeychainHelper {
     }
 
     static func delete(service: String, account: String) throws {
-        // Delete from Data Protection keychain
-        let dpQuery: [CFString: Any] = [
+        let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
             kSecAttrAccount: account,
-            kSecUseDataProtectionKeychain: true,
         ]
-        SecItemDelete(dpQuery as CFDictionary)
 
-        // Also delete from legacy keychain
-        let legacyQuery: [CFString: Any] = [
-            kSecClass: kSecClassGenericPassword,
-            kSecAttrService: service,
-            kSecAttrAccount: account,
-        ]
-        SecItemDelete(legacyQuery as CFDictionary)
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.unexpectedStatus(status)
+        }
     }
 
     static func exists(service: String, account: String) -> Bool {
-        // Check Data Protection keychain first
-        let dpQuery: [CFString: Any] = [
+        let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
             kSecAttrAccount: account,
             kSecMatchLimit: kSecMatchLimitOne,
-            kSecUseDataProtectionKeychain: true,
         ]
-        if SecItemCopyMatching(dpQuery as CFDictionary, nil) == errSecSuccess {
-            return true
-        }
 
-        // Fall back to legacy keychain
-        let legacyQuery: [CFString: Any] = [
-            kSecClass: kSecClassGenericPassword,
-            kSecAttrService: service,
-            kSecAttrAccount: account,
-            kSecMatchLimit: kSecMatchLimitOne,
-        ]
-        return SecItemCopyMatching(legacyQuery as CFDictionary, nil) == errSecSuccess
+        let status = SecItemCopyMatching(query as CFDictionary, nil)
+        return status == errSecSuccess
     }
 }
