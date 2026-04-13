@@ -21,12 +21,6 @@ final class OpenAIProvider: TranscriptionProvider {
             provider: .openai,
             isDictationCapable: true
         ),
-        TranscriptionModel(
-            id: "whisper-1",
-            displayName: "Whisper v1",
-            provider: .openai,
-            isDictationCapable: true
-        ),
     ]
 
     var defaultModel: TranscriptionModel { supportedModels[0] }
