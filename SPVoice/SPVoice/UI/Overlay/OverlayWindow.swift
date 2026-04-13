@@ -2,15 +2,16 @@ import Cocoa
 import SwiftUI
 
 /// Borderless, always-on-top floating window for showing dictation state.
-/// Phase 2: skeleton. Animation and positioning refined in Phase 5.
-final class OverlayWindow: NSWindow {
+/// Uses NSPanel with .nonactivatingPanel so it NEVER steals focus from
+/// the user's target app — critical for clipboard paste to land correctly.
+final class OverlayWindow: NSPanel {
 
     private let hostingController = NSHostingController(rootView: OverlayView(state: .idle, audioLevel: 0))
 
     init() {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 260, height: 64),
-            styleMask: [.borderless],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -21,6 +22,8 @@ final class OverlayWindow: NSWindow {
         ignoresMouseEvents = true
         hasShadow = true
         collectionBehavior = [.canJoinAllSpaces, .stationary]
+        isFloatingPanel = true
+        becomesKeyOnlyIfNeeded = true
         contentViewController = hostingController
     }
 

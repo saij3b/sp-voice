@@ -51,12 +51,14 @@ enum TextInsertionService {
         let bundleID = savedTarget?.bundleIdentifier ?? runningAppBundleIdentifier(for: appPID)
         let isChromium = savedTarget?.isChromium
             ?? (bundleID.map { FocusedElementService.chromiumBundleIDs.contains($0) } ?? false)
+        let isDirectPaste = isChromium
+            || (bundleID.map { directPasteBundleIDs.contains($0) } ?? false)
 
-        // ── Chromium fast-path ──────────────────────────────────────────────
-        // AX insertion NEVER works in Chromium web views. Go straight to
-        // clipboard paste to avoid wasting time and risking stale AX refs.
-        if isChromium {
-            Logger.insertion.info("Chromium detected (\(bundleID ?? "?")) — using direct paste path")
+        // ── Direct paste fast-path ──────────────────────────────────────────
+        // AX insertion NEVER works in Chromium, Electron, or Catalyst apps.
+        // Skip AX strategies entirely and go straight to clipboard paste.
+        if isDirectPaste {
+            Logger.insertion.info("Direct paste app detected (\(bundleID ?? "?")) — skipping AX")
             return await chromiumPaste(
                 text: text,
                 savedTarget: savedTarget,
@@ -400,33 +402,47 @@ enum TextInsertionService {
         return defaultProfile
     }
 
-    /// Known Electron, Catalyst, and hybrid-framework app bundle IDs.
-    /// These apps need slightly more generous paste timing than pure Cocoa apps.
-    private static let electronAndHybridBundleIDs: Set<String> = [
-        // Electron apps
+    /// Electron, Catalyst, and non-native apps where AX insertion never works.
+    /// All of these go through the direct clipboard paste path (same as Chromium).
+    static let directPasteBundleIDs: Set<String> = [
+        // ── Electron apps ──────────────────────────────────────────────────
         "com.tinyspeck.slackmacgap",        // Slack
-        "com.microsoft.VSCode",              // VS Code
-        "com.hnc.Discord",                   // Discord
-        "com.bitwarden.desktop",             // Bitwarden
-        "com.electron.lark",                 // Lark (Electron variant)
-        "com.anthropic.claudefordesktop",    // Claude Desktop
-        "com.openai.chat",                   // ChatGPT Desktop
-        "com.openai.codex",                  // Codex
-        "com.linear",                        // Linear
-        "com.figma.Desktop",                 // Figma
-        "com.spotify.client",               // Spotify
+        "com.microsoft.VSCode",             // VS Code
+        "com.hnc.Discord",                  // Discord
         "com.hnc.Discord.Canary",           // Discord Canary
-        "com.1password.1password",           // 1Password
-        // Catalyst / hybrid / cross-platform
-        "net.whatsapp.WhatsApp",             // WhatsApp (Catalyst)
-        "ru.keepcoder.Telegram",             // Telegram
-        "com.tencent.xinWeChat",             // WeChat
-        "com.larksuite.macos.lark",          // Lark (native variant)
-        "ai.perplexity.comet",               // Perplexity
-        "com.microsoft.Outlook",             // Outlook
-        "com.microsoft.teams2",              // Teams
-        "com.facebook.archon",               // Messenger
+        "com.bitwarden.desktop",            // Bitwarden
+        "com.electron.lark",                // Lark (Electron)
+        "com.anthropic.claudefordesktop",   // Claude Desktop
+        "com.openai.chat",                  // ChatGPT Desktop
+        "com.linear",                       // Linear
+        "com.figma.Desktop",                // Figma
+        "com.spotify.client",               // Spotify
+        "com.1password.1password",          // 1Password
+        "com.notion.id",                    // Notion
+        "com.github.GitHubDesktop",         // GitHub Desktop
+        "com.microsoft.VSCodeInsiders",     // VS Code Insiders
+        "md.obsidian",                      // Obsidian
+        "com.todoist.mac.Todoist",          // Todoist
+        "com.grammarly.ProjectLlama",       // Grammarly Desktop
+        // ── Catalyst / iOS-ported apps ─────────────────────────────────────
+        "net.whatsapp.WhatsApp",            // WhatsApp
+        "ru.keepcoder.Telegram",            // Telegram
+        "com.tencent.xinWeChat",            // WeChat
+        "com.facebook.archon",              // Messenger
+        "com.facebook.archon.developerid",  // Messenger (alt)
+        "com.larksuite.macos.lark",         // Lark
+        "ai.perplexity.comet",              // Perplexity
+        // ── Microsoft Office / Teams ───────────────────────────────────────
+        "com.microsoft.Outlook",            // Outlook
+        "com.microsoft.teams2",             // Teams
+        "com.microsoft.Word",               // Word
+        "com.microsoft.Excel",              // Excel
+        "com.microsoft.Powerpoint",         // PowerPoint
     ]
+
+    /// Known Electron, Catalyst, and hybrid-framework app bundle IDs.
+    /// Kept for backward compatibility — superseded by directPasteBundleIDs.
+    private static let electronAndHybridBundleIDs: Set<String> = directPasteBundleIDs
 
     private static func runningAppBundleIdentifier(for processIdentifier: pid_t?) -> String? {
         guard let processIdentifier, processIdentifier > 0 else { return nil }
