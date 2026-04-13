@@ -48,7 +48,9 @@ final class CredentialsStore: CredentialsStoring {
         else {
             return nil
         }
-        return key
+        // Trim in case keys were stored before the whitespace fix
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     func delete(for provider: ProviderID) throws {
