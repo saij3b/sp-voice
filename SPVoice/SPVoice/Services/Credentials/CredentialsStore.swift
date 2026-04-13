@@ -11,23 +11,21 @@ protocol CredentialsStoring {
     func configuredProviders() -> [ProviderID]
 }
 
-// MARK: - Keychain-backed Implementation
+// MARK: - UserDefaults-backed Implementation (no Keychain, no password prompts)
 
 final class CredentialsStore: CredentialsStoring {
 
-    private let service: String
+    private let defaults = UserDefaults.standard
+    private let keyPrefix = "spvoice.apikey."
 
     init(service: String = SPVoiceConstants.keychainService) {
-        self.service = service
+        // Migrate any existing keychain entries to UserDefaults once
+        migrateFromKeychainIfNeeded()
     }
 
     func store(key: String, for provider: ProviderID) throws {
         // Trim whitespace/newlines — pasted keys often have trailing characters
         let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard let data = trimmedKey.data(using: .utf8) else {
-            throw CredentialsError.encodingFailed
-        }
 
         // Lightweight format validation
         if let prefix = provider.keyPrefixHint {
@@ -38,32 +36,52 @@ final class CredentialsStore: CredentialsStoring {
             }
         }
 
-        try KeychainHelper.save(service: service, account: provider.rawValue, data: data)
+        defaults.set(trimmedKey, forKey: keyPrefix + provider.rawValue)
         Logger.credentials.info("Stored credential for \(provider.rawValue, privacy: .public)")
     }
 
     func retrieve(for provider: ProviderID) -> String? {
-        guard let data = try? KeychainHelper.load(service: service, account: provider.rawValue),
-              let key = String(data: data, encoding: .utf8)
-        else {
+        guard let key = defaults.string(forKey: keyPrefix + provider.rawValue) else {
             return nil
         }
-        // Trim in case keys were stored before the whitespace fix
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
 
     func delete(for provider: ProviderID) throws {
-        try KeychainHelper.delete(service: service, account: provider.rawValue)
+        defaults.removeObject(forKey: keyPrefix + provider.rawValue)
         Logger.credentials.info("Deleted credential for \(provider.rawValue, privacy: .public)")
     }
 
     func hasCredential(for provider: ProviderID) -> Bool {
-        KeychainHelper.exists(service: service, account: provider.rawValue)
+        retrieve(for: provider) != nil
     }
 
     func configuredProviders() -> [ProviderID] {
         ProviderID.allCases.filter { hasCredential(for: $0) }
+    }
+
+    // MARK: - Keychain migration
+
+    private func migrateFromKeychainIfNeeded() {
+        let migrationKey = "spvoice.keychainMigrationDone"
+        guard !defaults.bool(forKey: migrationKey) else { return }
+
+        for provider in ProviderID.allCases {
+            if let data = try? KeychainHelper.load(
+                    service: SPVoiceConstants.keychainService,
+                    account: provider.rawValue),
+               let key = String(data: data, encoding: .utf8) {
+                let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    defaults.set(trimmed, forKey: keyPrefix + provider.rawValue)
+                    Logger.credentials.info("Migrated keychain credential for \(provider.rawValue, privacy: .public)")
+                }
+                try? KeychainHelper.delete(service: SPVoiceConstants.keychainService, account: provider.rawValue)
+            }
+        }
+
+        defaults.set(true, forKey: migrationKey)
     }
 }
 
