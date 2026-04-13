@@ -175,6 +175,7 @@ struct ShortcutSettingsView: View {
         case 56, 60: return .shift
         case 58, 61: return .option
         case 59, 62: return .control
+        case 63: return .function
         default: return nil
         }
     }

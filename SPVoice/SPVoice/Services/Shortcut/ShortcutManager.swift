@@ -32,7 +32,7 @@ final class ShortcutManager: ObservableObject {
 
         static func isModifierKey(_ code: UInt16) -> Bool {
             switch code {
-            case 54, 55, 56, 58, 59, 60, 61, 62:
+            case 54, 55, 56, 58, 59, 60, 61, 62, 63:
                 return true
             default:
                 return false
@@ -49,6 +49,7 @@ final class ShortcutManager: ObservableObject {
             case 60: return "R⇧"
             case 61: return "R⌥"
             case 62: return "R⌃"
+            case 63: return "Fn"
             case 0: return "A"
             case 1: return "S"
             case 2: return "D"
@@ -358,6 +359,7 @@ final class HotkeyTap {
         case 56, 60: return .maskShift
         case 58, 61: return .maskAlternate
         case 59, 62: return .maskControl
+        case 63: return .maskSecondaryFn
         default: return nil
         }
     }
