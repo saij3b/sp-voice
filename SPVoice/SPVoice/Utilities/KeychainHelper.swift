@@ -22,29 +22,38 @@ enum KeychainHelper {
 
     // MARK: - CRUD
 
+    /// Build a SecAccess that lets any application read this item without a password prompt.
+    /// Passing an empty array to SecAccessCreate means "any app is trusted".
+    private static func makeOpenAccess(label: String) -> SecAccess? {
+        var access: SecAccess?
+        let status = SecAccessCreate(label as CFString, [] as CFArray, &access)
+        return status == errSecSuccess ? access : nil
+    }
+
     static func save(service: String, account: String, data: Data) throws {
-        let query: [CFString: Any] = [
+        // Delete any existing item first so we can recreate it with the open access policy.
+        // This avoids the "wrong ACL owner" prompt that occurs after re-signing.
+        let deleteQuery: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: service,
+            kSecAttrAccount: account,
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)   // ignore errors — item may not exist
+
+        var query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
             kSecAttrAccount: account,
             kSecValueData: data,
         ]
 
-        let status = SecItemAdd(query as CFDictionary, nil)
+        // Attach the open-access policy so no password dialog appears.
+        if let access = makeOpenAccess(label: service) {
+            query[kSecAttrAccess] = access
+        }
 
-        if status == errSecDuplicateItem {
-            // Update existing
-            let updateQuery: [CFString: Any] = [
-                kSecClass: kSecClassGenericPassword,
-                kSecAttrService: service,
-                kSecAttrAccount: account,
-            ]
-            let attributes: [CFString: Any] = [kSecValueData: data]
-            let updateStatus = SecItemUpdate(updateQuery as CFDictionary, attributes as CFDictionary)
-            guard updateStatus == errSecSuccess else {
-                throw KeychainError.unexpectedStatus(updateStatus)
-            }
-        } else if status != errSecSuccess {
+        let status = SecItemAdd(query as CFDictionary, nil)
+        guard status == errSecSuccess else {
             throw KeychainError.unexpectedStatus(status)
         }
     }
