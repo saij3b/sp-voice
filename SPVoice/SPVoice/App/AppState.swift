@@ -123,8 +123,12 @@ final class AppState: ObservableObject {
             }
         }
 
+        // Re-register hotkey only when a permission is newly GRANTED (false → true).
+        // Firing on revocation causes register() to attempt a listen-only CGEvent tap,
+        // which internally triggers the Input Monitoring system dialog — cascading failures.
         permissionsManager.$inputMonitoringGranted
             .removeDuplicates()
+            .filter { $0 == true }
             .sink { [weak self] _ in
                 guard let self, self.hasCompletedOnboarding else { return }
                 self.shortcutManager.register()
@@ -133,6 +137,7 @@ final class AppState: ObservableObject {
 
         permissionsManager.$accessibilityGranted
             .removeDuplicates()
+            .filter { $0 == true }
             .sink { [weak self] _ in
                 guard let self, self.hasCompletedOnboarding else { return }
                 self.shortcutManager.register()
