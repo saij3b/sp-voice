@@ -5,7 +5,10 @@ import os
 /// Detects the currently focused UI element using macOS Accessibility APIs.
 enum FocusedElementService {
 
-    /// Known Chromium-based browser bundle IDs.
+    /// Bundle IDs of web browsers whose web content (contenteditable divs etc.)
+    /// requires the direct-paste path with generous timing. Includes both
+    /// Chromium-based browsers and WebKit-based browsers (Safari). AX direct
+    /// insertion into web content is unreliable regardless of engine.
     static let chromiumBundleIDs: Set<String> = [
         "com.brave.Browser",
         "com.brave.Browser.beta",
@@ -18,6 +21,9 @@ enum FocusedElementService {
         "com.operasoftware.Opera",
         "com.microsoft.edgemac",
         "com.microsoft.edgemac.Beta",
+        // WebKit-based browsers — same web-content paste requirements:
+        "com.apple.Safari",
+        "com.apple.SafariTechnologyPreview",
     ]
 
     /// Resolve the currently focused text target.
