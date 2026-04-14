@@ -66,6 +66,13 @@ final class PermissionsManager: ObservableObject {
 
     /// Open System Settings to the Accessibility pane.
     func openAccessibilitySettings() {
+        if !accessibilityGranted {
+            // Clear stale TCC entry (e.g. from a different signing identity) so macOS
+            // will prompt for a fresh grant tied to the current binary's identity.
+            resetTCC(for: "Accessibility")
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
+        }
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }
@@ -117,6 +124,12 @@ final class PermissionsManager: ObservableObject {
     }
 
     func openInputMonitoringSettings() {
+        if !inputMonitoringGranted {
+            // Clear stale TCC entry (e.g. from a different signing identity) so macOS
+            // will prompt for a fresh grant tied to the current binary's identity.
+            resetTCC(for: "ListenEvent")
+            _ = CGRequestListenEventAccess()
+        }
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
             NSWorkspace.shared.open(url)
         }
@@ -125,9 +138,22 @@ final class PermissionsManager: ObservableObject {
     }
 
     func requestInputMonitoring() {
+        resetTCC(for: "ListenEvent")
         let granted = CGRequestListenEventAccess()
         inputMonitoringGranted = granted || currentInputMonitoringTrust()
         startPollingAccessibility()
+    }
+
+    // MARK: - TCC Reset
+
+    private func resetTCC(for service: String) {
+        let bundleID = Bundle.main.bundleIdentifier ?? SPVoiceConstants.bundleIdentifier
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        process.arguments = ["reset", service, bundleID]
+        try? process.run()
+        process.waitUntilExit()
+        Logger.permissions.info("TCC reset for \(service) (\(bundleID))")
     }
 
     private func currentMicrophoneStatus() -> MicrophoneStatus {

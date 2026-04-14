@@ -131,6 +131,14 @@ final class AppState: ObservableObject {
             }
             .store(in: &cancellables)
 
+        permissionsManager.$accessibilityGranted
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                guard let self, self.hasCompletedOnboarding else { return }
+                self.shortcutManager.register()
+            }
+            .store(in: &cancellables)
+
         $dictationState
             .removeDuplicates()
             .sink { [weak self] _ in

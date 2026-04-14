@@ -11,6 +11,12 @@ final class GeminiProvider: TranscriptionProvider {
 
     let supportedModels: [TranscriptionModel] = [
         TranscriptionModel(
+            id: "gemini-2.5-flash-lite",
+            displayName: "Gemini 2.5 Flash Lite",
+            provider: .gemini,
+            isDictationCapable: true
+        ),
+        TranscriptionModel(
             id: "gemini-2.5-flash",
             displayName: "Gemini 2.5 Flash",
             provider: .gemini,
