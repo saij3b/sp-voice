@@ -32,6 +32,9 @@ xcrun --sdk macosx swiftc \
 echo "==> Installing binary..."
 cp /tmp/sp-voice-binary "$BINARY"
 
+echo "==> Copying icon resource..."
+cp "$SRC/SPVoice/Resources/SPVoice.icns" "$APP/Contents/Resources/SPVoice.icns"
+
 echo "==> Signing bundle with SP Voice Dev cert..."
 codesign -s "SP Voice Dev" -f \
   --identifier "com.spvoice.app" \

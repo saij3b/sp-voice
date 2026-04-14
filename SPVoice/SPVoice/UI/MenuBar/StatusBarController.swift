@@ -12,7 +12,7 @@ final class StatusBarController {
 
     func setup() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.image = NSImage(systemSymbolName: "mic", accessibilityDescription: "SP Voice")
+        item.button?.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "SP Voice")
         statusItem = item
     }
 

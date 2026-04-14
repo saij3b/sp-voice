@@ -5,70 +5,103 @@ struct HistoryView: View {
     @EnvironmentObject private var appState: AppState
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: DS.Space.md) {
             if appState.historyStore.entries.isEmpty {
-                emptyState
+                emptyCard
             } else {
-                historyList
+                headerBar
+                entriesList
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var emptyState: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "clock")
-                .font(.system(size: 32))
-                .foregroundStyle(.secondary)
-            Text("No dictation history")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-            Text("Your recent dictations will appear here.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+    private var emptyCard: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(DS.Gradients.work.opacity(0.2))
+                    .frame(width: 64, height: 64)
+                Image(systemName: "text.alignleft")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(DS.Gradients.work)
+            }
+            Text("No dictations yet")
+                .font(DS.Font.titleSmall)
+                .foregroundStyle(DS.Palette.textPrimary)
+            Text("Your recent transcriptions will appear here.")
+                .font(DS.Font.caption)
+                .foregroundStyle(DS.Palette.textTertiary)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, minHeight: 260)
+        .padding(DS.Space.xl)
+        .background(
+            RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
+                .fill(Color.white.opacity(0.03))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
+                .strokeBorder(DS.Palette.strokeSubtle, lineWidth: 1)
+        )
     }
 
-    private var historyList: some View {
-        VStack(spacing: 0) {
-            List {
-                ForEach(appState.historyStore.entries) { entry in
-                    historyRow(entry)
-                }
+    private var headerBar: some View {
+        HStack {
+            Text("\(appState.historyStore.entries.count) entries")
+                .font(DS.Font.caption)
+                .foregroundStyle(DS.Palette.textTertiary)
+            Spacer()
+            Button {
+                appState.historyStore.clear()
+            } label: {
+                Label("Clear all", systemImage: "trash")
             }
-            .listStyle(.inset)
+            .buttonStyle(GhostButtonStyle(size: .small))
+        }
+    }
 
-            HStack {
-                Text("\(appState.historyStore.entries.count) entries")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("Clear All") {
-                    appState.historyStore.clear()
-                }
-                .controlSize(.small)
+    private var entriesList: some View {
+        LazyVStack(spacing: DS.Space.xs) {
+            ForEach(appState.historyStore.entries) { entry in
+                entryCard(entry)
             }
-            .padding(8)
         }
     }
 
     @ViewBuilder
-    private func historyRow(_ entry: HistoryStore.Entry) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(entry.timestamp, style: .relative)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+    private func entryCard(_ entry: HistoryStore.Entry) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                // Provider chip
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(DS.Gradients.work)
+                        .frame(width: 6, height: 6)
+                    Text(entry.provider.rawValue.capitalized)
+                        .font(DS.Font.caption)
+                        .foregroundStyle(DS.Palette.textSecondary)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(Color.white.opacity(0.05)))
+                .overlay(Capsule().strokeBorder(DS.Palette.strokeSubtle, lineWidth: 1))
+
+                Text("\(entry.latencyMs) ms")
+                    .font(DS.Font.captionMono)
+                    .foregroundStyle(DS.Palette.textTertiary)
+
                 Spacer()
-                Text("\(entry.provider.rawValue) · \(entry.latencyMs)ms")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+
+                Text(entry.timestamp, style: .relative)
+                    .font(DS.Font.caption)
+                    .foregroundStyle(DS.Palette.textTertiary)
             }
 
             Text(entry.text)
-                .font(.system(.caption, design: .default))
-                .lineLimit(3)
+                .font(DS.Font.body)
+                .foregroundStyle(DS.Palette.textPrimary)
+                .lineLimit(4)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 8) {
                 Button {
@@ -76,12 +109,20 @@ struct HistoryView: View {
                     NSPasteboard.general.setString(entry.text, forType: .string)
                 } label: {
                     Label("Copy", systemImage: "doc.on.doc")
-                        .font(.caption2)
                 }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
+                .buttonStyle(GhostButtonStyle(size: .small))
+
+                Spacer()
             }
         }
-        .padding(.vertical, 2)
+        .padding(DS.Space.sm)
+        .background(
+            RoundedRectangle(cornerRadius: DS.Radius.sm, style: .continuous)
+                .fill(Color.white.opacity(0.03))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.Radius.sm, style: .continuous)
+                .strokeBorder(DS.Palette.strokeSubtle, lineWidth: 1)
+        )
     }
 }

@@ -37,13 +37,13 @@ extension DictationState {
 
     var menuBarIcon: String {
         switch self {
-        case .idle: return "mic"
-        case .listening: return "mic.fill"
-        case .transcribing: return "waveform"
-        case .processing: return "gear"
+        case .idle: return "waveform"
+        case .listening: return "waveform.and.mic"
+        case .transcribing: return "waveform.path.ecg"
+        case .processing: return "sparkles"
         case .inserting: return "text.cursor"
-        case .success: return "checkmark.circle"
-        case .error: return "exclamationmark.triangle"
+        case .success: return "checkmark.circle.fill"
+        case .error: return "exclamationmark.triangle.fill"
         }
     }
 

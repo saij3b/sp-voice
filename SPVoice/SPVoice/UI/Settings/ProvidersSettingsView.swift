@@ -5,95 +5,175 @@ struct ProvidersSettingsView: View {
     @EnvironmentObject private var appState: AppState
     @State private var validationStates: [ProviderID: ValidationState] = [:]
     @State private var showAllModels = false
+    @State private var isRefreshingModels = false
 
     private enum ValidationState {
         case idle, loading, success, failed(String)
     }
 
     var body: some View {
-        Form {
-            Section("Primary Provider") {
-                Picker("Provider", selection: primaryBinding) {
+        VStack(alignment: .leading, spacing: DS.Space.md) {
+            routingCard
+            apiKeysCard
+            optionsCard
+        }
+    }
+
+    // MARK: Routing (primary + secondary + model)
+
+    private var routingCard: some View {
+        SettingsCard(title: "Transcription routing", subtitle: "Primary provider and fallback", icon: "sparkles") {
+            SettingsRow(label: "Primary", description: "Used first for every dictation") {
+                EmptyView()
+            } trailing: {
+                Picker("", selection: primaryBinding) {
                     Text("Auto").tag(Optional<ProviderID>.none)
                     ForEach(ProviderID.allCases, id: \.self) { id in
-                        providerLabel(id).tag(Optional(id))
+                        Text(id.displayName).tag(Optional(id))
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(maxWidth: 200)
+            }
+
+            if let primaryID = appState.providerManager.resolvedPrimaryID,
+               let provider = appState.providerManager.provider(for: primaryID) {
+                Divider().overlay(DS.Palette.strokeSubtle)
+
+                SettingsRow(label: "Model", description: "The specific transcription model") {
+                    EmptyView()
+                } trailing: {
+                    modelPicker(for: provider)
+                }
+
+                if provider.id == .openrouter {
+                    HStack {
+                        Button {
+                            refreshOpenRouterModels()
+                        } label: {
+                            Label("Refresh models", systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(GhostButtonStyle(size: .small))
+                        .disabled(isRefreshingModels)
+
+                        if isRefreshingModels {
+                            ProgressView().controlSize(.small)
+                        }
+
+                        Spacer()
+
+                        if let count = (provider as? OpenRouterProvider)?.lastDiscoveryCount {
+                            Text("\(count) from API")
+                                .font(DS.Font.caption)
+                                .foregroundStyle(DS.Palette.textTertiary)
+                        } else {
+                            Text("\(provider.supportedModels.count) built-in")
+                                .font(DS.Font.caption)
+                                .foregroundStyle(DS.Palette.textTertiary)
+                        }
                     }
                 }
 
-                if let primaryID = appState.providerManager.resolvedPrimaryID,
-                   let provider = appState.providerManager.provider(for: primaryID) {
-                    modelPicker(for: provider)
-
-                    if let caveat = provider.capabilities.caveatNote {
+                if let caveat = provider.capabilities.caveatNote {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 10))
+                            .foregroundStyle(DS.Palette.warnFrom)
                         Text(caveat)
-                            .font(.caption)
-                            .foregroundStyle(.orange)
+                            .font(DS.Font.caption)
+                            .foregroundStyle(DS.Palette.warnFrom)
                     }
                 }
             }
 
-            Section("Secondary Provider (Fallback)") {
-                Picker("Provider", selection: secondaryBinding) {
+            Divider().overlay(DS.Palette.strokeSubtle)
+
+            SettingsRow(label: "Fallback", description: "Used if the primary provider fails") {
+                EmptyView()
+            } trailing: {
+                Picker("", selection: secondaryBinding) {
                     Text("None").tag(Optional<ProviderID>.none)
                     ForEach(ProviderID.allCases, id: \.self) { id in
-                        providerLabel(id).tag(Optional(id))
+                        Text(id.displayName).tag(Optional(id))
                     }
                 }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(maxWidth: 200)
             }
+        }
+    }
 
-            Section("API Keys") {
-                ForEach(ProviderID.allCases, id: \.self) { id in
-                    VStack(alignment: .leading, spacing: 4) {
+    // MARK: API Keys
+
+    private var apiKeysCard: some View {
+        SettingsCard(title: "API keys", subtitle: "Stored locally — never leaves this Mac", icon: "key") {
+            VStack(spacing: DS.Space.sm) {
+                ForEach(Array(ProviderID.allCases.enumerated()), id: \.element) { idx, id in
+                    VStack(alignment: .leading, spacing: 6) {
                         CredentialEntryView(providerID: id)
                             .environmentObject(appState)
 
                         if appState.credentialsStore.hasCredential(for: id) {
                             HStack(spacing: 8) {
-                                testConnectionButton(for: id)
+                                Button {
+                                    testConnection(for: id)
+                                } label: {
+                                    Label("Test connection", systemImage: "bolt.horizontal")
+                                }
+                                .buttonStyle(GhostButtonStyle(size: .small))
+                                .disabled(isValidationLoading(id))
+
                                 validationStatusView(for: id)
+
+                                Spacer()
                             }
-                            .padding(.leading, 90)
+                            .padding(.leading, 130)
                         }
+                    }
+                    if idx < ProviderID.allCases.count - 1 {
+                        Divider().overlay(DS.Palette.strokeSubtle)
                     }
                 }
             }
+        }
+    }
 
-            Section {
-                Toggle("Show all models (including unverified)", isOn: $showAllModels)
-                    .font(.caption)
+    private var optionsCard: some View {
+        SettingsCard(title: "Advanced", subtitle: nil, icon: "slider.horizontal.3") {
+            SettingsRow(label: "Show all models", description: "Include unverified and experimental models") {
+                EmptyView()
+            } trailing: {
+                Toggle("", isOn: $showAllModels)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .tint(DS.Palette.listenFrom)
             }
         }
-        .formStyle(.grouped)
-        .padding()
     }
 
-    // MARK: - Test Connection
-
-    @ViewBuilder
-    private func testConnectionButton(for id: ProviderID) -> some View {
-        let isLoading = isValidationLoading(id)
-        Button("Test Connection") {
-            testConnection(for: id)
-        }
-        .controlSize(.small)
-        .disabled(isLoading)
-    }
+    // MARK: Test Connection
 
     @ViewBuilder
     private func validationStatusView(for id: ProviderID) -> some View {
         let state = validationStates[id]
         if case .loading = state {
-            ProgressView()
-                .controlSize(.small)
+            ProgressView().controlSize(.small)
         } else if case .success = state {
-            Label("Valid", systemImage: "checkmark.circle.fill")
-                .font(.caption)
-                .foregroundStyle(.green)
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.circle.fill")
+                Text("Valid")
+            }
+            .font(DS.Font.caption)
+            .foregroundStyle(DS.Palette.goodFrom)
         } else if case .failed(let msg) = state {
-            Label(msg, systemImage: "xmark.circle.fill")
-                .font(.caption)
-                .foregroundStyle(.red)
-                .lineLimit(1)
+            HStack(spacing: 4) {
+                Image(systemName: "xmark.circle.fill")
+                Text(msg).lineLimit(1)
+            }
+            .font(DS.Font.caption)
+            .foregroundStyle(DS.Palette.errorFrom)
         }
     }
 
@@ -114,7 +194,7 @@ struct ProvidersSettingsView: View {
         }
     }
 
-    // MARK: - Bindings
+    // MARK: Bindings
 
     private var primaryBinding: Binding<ProviderID?> {
         Binding(
@@ -130,18 +210,7 @@ struct ProvidersSettingsView: View {
         )
     }
 
-    @ViewBuilder
-    private func providerLabel(_ id: ProviderID) -> some View {
-        let caps = appState.providerManager.provider(for: id)?.capabilities
-        HStack {
-            Text(id.displayName)
-            if caps?.isDictationReady == false {
-                Text("(experimental)")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
-        }
-    }
+    // MARK: Model picker
 
     @ViewBuilder
     private func modelPicker(for provider: TranscriptionProvider) -> some View {
@@ -150,48 +219,17 @@ struct ProvidersSettingsView: View {
             : provider.supportedModels.filter(\.isDictationCapable)
         let models = modelsIncludingSavedSelection(baseModels, for: provider.id)
         if !models.isEmpty {
-            Picker("Model", selection: modelBinding(for: provider.id)) {
+            Picker("", selection: modelBinding(for: provider.id)) {
                 ForEach(models, id: \.id) { model in
-                    HStack {
-                        Text(model.displayName)
-                        if !model.isDictationCapable {
-                            Text("(unverified)")
-                                .font(.caption)
-                                .foregroundStyle(.orange)
-                        }
-                    }
-                    .tag(model.id)
+                    Text(model.displayName + (model.isDictationCapable ? "" : "  (unverified)"))
+                        .tag(model.id)
                 }
             }
-
-            if provider.id == .openrouter {
-                HStack {
-                    Button("Refresh Models") {
-                        refreshOpenRouterModels()
-                    }
-                    .controlSize(.small)
-                    .disabled(isRefreshingModels)
-
-                    if isRefreshingModels {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-
-                    if let count = (provider as? OpenRouterProvider)?.lastDiscoveryCount {
-                        Text("\(count) from API")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("\(provider.supportedModels.count) built-in")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(maxWidth: 260)
         }
     }
-
-    @State private var isRefreshingModels = false
 
     private func refreshOpenRouterModels() {
         isRefreshingModels = true
