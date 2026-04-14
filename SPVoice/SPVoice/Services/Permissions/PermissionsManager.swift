@@ -172,19 +172,13 @@ final class PermissionsManager: ObservableObject {
     }
 
     private func currentAccessibilityTrust() -> Bool {
+        // Rely on TCC directly. Do NOT fall back to an AX probe call — macOS
+        // lets ungranted processes query kAXFocusedApplicationAttribute loosely
+        // at first, so the probe produces false positives that flip to false
+        // once the app attempts a real AX operation. That caused the UI to
+        // show "Granted" until the first hotkey press.
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): false] as CFDictionary
-        if AXIsProcessTrustedWithOptions(options) {
-            return true
-        }
-
-        let systemWide = AXUIElementCreateSystemWide()
-        var focusedApp: CFTypeRef?
-        let result = AXUIElementCopyAttributeValue(
-            systemWide,
-            kAXFocusedApplicationAttribute as CFString,
-            &focusedApp
-        )
-        return result == .success
+        return AXIsProcessTrustedWithOptions(options)
     }
 
     private func currentInputMonitoringTrust() -> Bool {
