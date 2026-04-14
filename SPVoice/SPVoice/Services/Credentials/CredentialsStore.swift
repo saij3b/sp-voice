@@ -37,7 +37,7 @@ final class CredentialsStore: CredentialsStoring {
         }
 
         defaults.set(trimmedKey, forKey: keyPrefix + provider.rawValue)
-        Logger.credentials.info("Stored credential for \(provider.rawValue, privacy: .public)")
+        Logger.credentials.info("Stored credential for \(provider.rawValue, privacy: .private)")
     }
 
     func retrieve(for provider: ProviderID) -> String? {
@@ -50,7 +50,7 @@ final class CredentialsStore: CredentialsStoring {
 
     func delete(for provider: ProviderID) throws {
         defaults.removeObject(forKey: keyPrefix + provider.rawValue)
-        Logger.credentials.info("Deleted credential for \(provider.rawValue, privacy: .public)")
+        Logger.credentials.info("Deleted credential for \(provider.rawValue, privacy: .private)")
     }
 
     func hasCredential(for provider: ProviderID) -> Bool {
@@ -75,7 +75,7 @@ final class CredentialsStore: CredentialsStoring {
                 let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     defaults.set(trimmed, forKey: keyPrefix + provider.rawValue)
-                    Logger.credentials.info("Migrated keychain credential for \(provider.rawValue, privacy: .public)")
+                    Logger.credentials.info("Migrated keychain credential for \(provider.rawValue, privacy: .private)")
                 }
                 try? KeychainHelper.delete(service: SPVoiceConstants.keychainService, account: provider.rawValue)
             }

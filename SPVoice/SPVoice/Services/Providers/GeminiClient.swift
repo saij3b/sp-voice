@@ -12,13 +12,15 @@ enum GeminiClient {
         "Transcribe the following audio exactly as spoken. Output only the transcription text, with no preamble, commentary, or formatting."
 
     // MARK: - URLs
+    // Keys go in the x-goog-api-key header, not the query string, so they
+    // don't land in URL caches, proxies, or os_log URL traces.
 
-    static func generateContentURL(model: String, apiKey: String) -> URL {
-        URL(string: "\(baseURL)/models/\(model):generateContent?key=\(apiKey)")!
+    static func generateContentURL(model: String) -> URL {
+        URL(string: "\(baseURL)/models/\(model):generateContent")!
     }
 
-    static func modelsURL(apiKey: String) -> URL {
-        URL(string: "\(baseURL)/models?key=\(apiKey)")!
+    static func modelsURL() -> URL {
+        URL(string: "\(baseURL)/models")!
     }
 
     // MARK: - Request Builders
@@ -60,10 +62,11 @@ enum GeminiClient {
             ],
         ]
 
-        let url = generateContentURL(model: model, apiKey: apiKey)
+        let url = generateContentURL(model: model)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         request.timeoutInterval = SPVoiceConstants.Defaults.transcriptionTimeoutSeconds
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
@@ -72,8 +75,9 @@ enum GeminiClient {
 
     /// Build a GET /models request for credential validation.
     static func buildValidationRequest(apiKey: String) -> URLRequest {
-        var request = URLRequest(url: modelsURL(apiKey: apiKey))
+        var request = URLRequest(url: modelsURL())
         request.httpMethod = "GET"
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         request.timeoutInterval = 10
         return request
     }

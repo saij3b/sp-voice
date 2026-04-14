@@ -85,7 +85,7 @@ final class GeminiClientTests: XCTestCase {
     func testParseTranscriptionSuccess() throws {
         let json = #"{"candidates":[{"content":{"parts":[{"text":"Hello from Gemini"}]}}]}"#
         let data = json.data(using: .utf8)!
-        let url = GeminiClient.generateContentURL(model: "gemini-2.5-flash", apiKey: "test")
+        let url = GeminiClient.generateContentURL(model: "gemini-2.5-flash")
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
         let text = try GeminiClient.parseTranscriptionResponse(data: data, response: response)
         XCTAssertEqual(text, "Hello from Gemini")
@@ -94,7 +94,7 @@ final class GeminiClientTests: XCTestCase {
     func testParseTranscriptionTrimsWhitespace() throws {
         let json = #"{"candidates":[{"content":{"parts":[{"text":"  Trimmed  \n"}]}}]}"#
         let data = json.data(using: .utf8)!
-        let url = GeminiClient.generateContentURL(model: "test", apiKey: "test")
+        let url = GeminiClient.generateContentURL(model: "test")
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
         let text = try GeminiClient.parseTranscriptionResponse(data: data, response: response)
         XCTAssertEqual(text, "Trimmed")
@@ -103,7 +103,7 @@ final class GeminiClientTests: XCTestCase {
     func testParseTranscriptionEmptyText() {
         let json = #"{"candidates":[{"content":{"parts":[{"text":""}]}}]}"#
         let data = json.data(using: .utf8)!
-        let url = GeminiClient.generateContentURL(model: "test", apiKey: "test")
+        let url = GeminiClient.generateContentURL(model: "test")
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
         XCTAssertThrowsError(try GeminiClient.parseTranscriptionResponse(data: data, response: response)) { error in
             XCTAssertEqual(error as? ProviderError, .transcriptionEmpty)
@@ -112,7 +112,7 @@ final class GeminiClientTests: XCTestCase {
 
     func testParseTranscriptionMalformedJSON() {
         let data = "not json".data(using: .utf8)!
-        let url = GeminiClient.generateContentURL(model: "test", apiKey: "test")
+        let url = GeminiClient.generateContentURL(model: "test")
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
         XCTAssertThrowsError(try GeminiClient.parseTranscriptionResponse(data: data, response: response)) { error in
             XCTAssertEqual(error as? ProviderError, .transcriptionEmpty)
