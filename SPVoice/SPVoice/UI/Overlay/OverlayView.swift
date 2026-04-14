@@ -49,7 +49,7 @@ struct OverlayView: View {
         case .listening:
             RecordingGlyph(audioLevel: audioLevel)
         case .transcribing, .processing, .inserting:
-            ShimmerGlyph(gradient: state.accent)
+            MagicOrb(gradient: state.accent)
         case .success:
             SuccessGlyph()
         case .error:
@@ -78,18 +78,9 @@ struct OverlayView: View {
                     .font(DS.Font.headline)
                     .foregroundStyle(DS.Palette.textPrimary)
             }
-        case .transcribing:
-            Text("Transcribing")
-                .font(DS.Font.headline)
-                .foregroundStyle(DS.Palette.textPrimary)
-        case .processing:
-            Text("Processing")
-                .font(DS.Font.headline)
-                .foregroundStyle(DS.Palette.textPrimary)
-        case .inserting:
-            Text("Inserting")
-                .font(DS.Font.headline)
-                .foregroundStyle(DS.Palette.textPrimary)
+        case .transcribing, .processing, .inserting:
+            // Compact — just the orb. No text label.
+            EmptyView()
         case .success(let preview):
             Text(preview)
                 .font(DS.Font.bodyMedium)
@@ -118,7 +109,6 @@ private struct RecordingGlyph: View {
 
     var body: some View {
         ZStack {
-            // Soft outer pulse tied to audio level
             Circle()
                 .fill(DS.Gradients.listen)
                 .frame(width: 28, height: 28)
@@ -144,54 +134,275 @@ private struct RecordingGlyph: View {
     }
 }
 
-// MARK: - Shimmer Glyph (transcribing / processing / inserting)
+// MARK: - Magic Orb (pulsing sphere with inner orbiting sparkles)
 
-private struct ShimmerGlyph: View {
+private struct MagicOrb: View {
     let gradient: LinearGradient
-    @State private var phase: Double = 0
 
     var body: some View {
-        ZStack {
-            Circle()
-                .stroke(gradient, lineWidth: 2.4)
-                .frame(width: 24, height: 24)
-                .rotationEffect(.degrees(phase))
-                .mask(
-                    AngularGradient(
-                        colors: [.clear, .white, .white, .clear],
-                        center: .center,
-                        startAngle: .degrees(0),
-                        endAngle: .degrees(360)
-                    )
-                )
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let breath = 1.0 + 0.1 * sin(t * 2.4)
 
-            Image(systemName: "sparkle")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.white)
+            ZStack {
+                // Outer soft halo
+                Circle()
+                    .fill(gradient)
+                    .frame(width: 26, height: 26)
+                    .opacity(0.4)
+                    .blur(radius: 6)
+                    .scaleEffect(breath * 1.15)
+
+                // Core orb
+                Circle()
+                    .fill(gradient)
+                    .frame(width: 18, height: 18)
+                    .shadow(color: .white.opacity(0.5), radius: 4)
+                    .scaleEffect(breath)
+
+                // Orbiting inner sparkles — 3 points, 120° apart, gentle radius pulse
+                ForEach(0..<3, id: \.self) { i in
+                    let a = t * 1.9 + Double(i) * 2.094
+                    let radius = 4.5 + 1.2 * sin(t * 1.6 + Double(i))
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 2.2, height: 2.2)
+                        .offset(
+                            x: CGFloat(cos(a) * radius),
+                            y: CGFloat(sin(a) * radius)
+                        )
+                        .opacity(0.9)
+                        .shadow(color: .white.opacity(0.8), radius: 1.5)
+                }
+            }
+            .frame(width: 28, height: 28)
         }
-        .frame(width: 28, height: 28)
-        .onAppear {
-            withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
-                phase = 360
+    }
+}
+
+// MARK: - Transcribing Glyph (audio waves dissolving into text)
+
+private struct TranscribingGlyph: View {
+    let gradient: LinearGradient
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            ZStack {
+                // Ripple ring — audio turning into text
+                ForEach(0..<3, id: \.self) { i in
+                    let phase = (t * 0.9 + Double(i) * 0.33).truncatingRemainder(dividingBy: 1.0)
+                    Circle()
+                        .stroke(gradient, lineWidth: 1.4)
+                        .frame(width: 10 + CGFloat(phase) * 22, height: 10 + CGFloat(phase) * 22)
+                        .opacity(1 - phase)
+                }
+
+                // Core text glyph
+                Image(systemName: "text.alignleft")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 20, height: 20)
+                    .background(
+                        Circle()
+                            .fill(gradient)
+                            .shadow(color: .black.opacity(0.25), radius: 4)
+                    )
+            }
+            .frame(width: 28, height: 28)
+        }
+    }
+}
+
+// MARK: - Processing Glyph (orbital sparkles — "thinking")
+
+private struct ProcessingGlyph: View {
+    let gradient: LinearGradient
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let angle = t * 180  // degrees/sec
+
+            ZStack {
+                // Halo
+                Circle()
+                    .stroke(gradient, lineWidth: 1.2)
+                    .frame(width: 26, height: 26)
+                    .opacity(0.45)
+
+                // Orbiting sparkles
+                ForEach(0..<3, id: \.self) { i in
+                    let a = Angle.degrees(angle + Double(i) * 120)
+                    Circle()
+                        .fill(gradient)
+                        .frame(width: 4, height: 4)
+                        .offset(
+                            x: cos(a.radians) * 12,
+                            y: sin(a.radians) * 12
+                        )
+                        .shadow(color: .white.opacity(0.6), radius: 2)
+                }
+
+                // Center spark
+                Image(systemName: "sparkles")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+                    .scaleEffect(1 + 0.1 * sin(t * 4))
+            }
+            .frame(width: 28, height: 28)
+        }
+    }
+}
+
+// MARK: - Writing Glyph (pen drawing a line — "placing text")
+
+private struct WritingGlyph: View {
+    let gradient: LinearGradient
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            // 0 → 1 → 0 smooth cycle — nib sweeps right, then resets
+            let cycle = (t.truncatingRemainder(dividingBy: 1.1)) / 1.1
+            let nibX = CGFloat(cycle) * 12 - 6
+
+            ZStack {
+                // Underline being written
+                Capsule()
+                    .fill(gradient)
+                    .frame(width: max(2, CGFloat(cycle) * 16), height: 2)
+                    .offset(x: -8 + CGFloat(cycle) * 8, y: 8)
+                    .opacity(0.9)
+
+                // Pencil glyph
+                Image(systemName: "pencil.tip")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.3), radius: 2)
+                    .offset(x: nibX, y: 0)
+
+                // Halo under nib
+                Circle()
+                    .fill(gradient)
+                    .frame(width: 4, height: 4)
+                    .offset(x: nibX, y: 6)
+                    .blur(radius: 1.5)
+                    .opacity(0.8)
+            }
+            .frame(width: 28, height: 28)
+        }
+    }
+}
+
+// MARK: - Typing Dots (inline bouncing dots)
+
+private struct TypingDots: View {
+    let gradient: LinearGradient
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 4) {
+                ForEach(0..<3, id: \.self) { i in
+                    let phase = sin(t * 4.5 + Double(i) * 0.7)
+                    let scale = 0.7 + 0.35 * max(0, phase)
+                    Circle()
+                        .fill(gradient)
+                        .frame(width: 6, height: 6)
+                        .scaleEffect(scale)
+                        .opacity(0.6 + 0.4 * max(0, phase))
+                }
             }
         }
     }
 }
 
-// MARK: - Success Glyph
+// MARK: - Thinking Orbits (inline twin orbit dots)
+
+private struct ThinkingOrbits: View {
+    let gradient: LinearGradient
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            ZStack {
+                ForEach(0..<2, id: \.self) { i in
+                    let a = t * 2.4 + Double(i) * .pi
+                    Circle()
+                        .fill(gradient)
+                        .frame(width: 5, height: 5)
+                        .offset(x: CGFloat(cos(a)) * 10, y: CGFloat(sin(a)) * 5)
+                        .shadow(color: .white.opacity(0.5), radius: 1)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Typewriter Line (animated underline — text being laid down)
+
+private struct TypewriterLine: View {
+    let gradient: LinearGradient
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let cycle = (t.truncatingRemainder(dividingBy: 1.1)) / 1.1
+            let width: CGFloat = 56
+            let fill = CGFloat(cycle) * width
+
+            ZStack(alignment: .leading) {
+                // Faint track
+                Capsule()
+                    .fill(Color.white.opacity(0.15))
+                    .frame(width: width, height: 3)
+                // Growing fill
+                Capsule()
+                    .fill(gradient)
+                    .frame(width: fill, height: 3)
+                // Moving cursor
+                Rectangle()
+                    .fill(Color.white)
+                    .frame(width: 2, height: 10)
+                    .offset(x: fill - 1)
+                    .shadow(color: .white.opacity(0.8), radius: 2)
+            }
+            .frame(width: width, height: 14, alignment: .leading)
+        }
+    }
+}
+
+// MARK: - Success Glyph (checkmark with expanding ring)
 
 private struct SuccessGlyph: View {
+    @State private var ringScale: CGFloat = 0.6
+    @State private var ringOpacity: Double = 0.9
+
     var body: some View {
         ZStack {
+            Circle()
+                .stroke(DS.Gradients.good, lineWidth: 2)
+                .frame(width: 24, height: 24)
+                .scaleEffect(ringScale)
+                .opacity(ringOpacity)
+
             Circle()
                 .fill(DS.Gradients.good)
                 .frame(width: 24, height: 24)
                 .shadow(color: DS.Palette.goodFrom.opacity(0.7), radius: 8)
+
             Image(systemName: "checkmark")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(.white)
         }
         .frame(width: 28, height: 28)
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.9)) {
+                ringScale = 1.6
+                ringOpacity = 0
+            }
+        }
     }
 }
 

@@ -377,9 +377,11 @@ final class AppState: ObservableObject {
 
     private func refreshOverlay() {
         switch dictationState {
-        case .listening:
+        case .listening, .transcribing, .processing:
             overlayWindow.showOverlay(state: dictationState, audioLevel: audioRecorder.audioLevel)
         default:
+            // Hide for .inserting (text is appearing in target app — no need for pill)
+            // and for .success / .error / .idle.
             overlayWindow.hideOverlay()
         }
     }
